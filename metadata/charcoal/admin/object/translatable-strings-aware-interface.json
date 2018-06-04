@@ -1,0 +1,27 @@
+{
+    "admin": {
+        "form_groups": {
+            "translatable-strings": {
+                "permissions": [ "translatable/edit" ],
+                "title": {
+                    "en": "Translations",
+                    "fr": "Traductions",
+                },
+                "show_title": false,
+                "show_header": false,
+                "icon": "globe",
+                "tabCssClasses": "pull-right",
+                "priority": 7500,
+                "type": "charcoal/admin/widget/form-group/nested-widget",
+                "widget_data": {
+                    "template": "charcoal/admin/widget/translatable-strings",
+                    "type": "charcoal/admin/widget/translatable-strings"
+                },
+                "renderable_data": {
+                    "show_context": true,
+                    "filtering": false
+                }
+            }
+        }
+    }
+}

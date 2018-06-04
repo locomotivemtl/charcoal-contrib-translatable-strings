@@ -1,0 +1,16 @@
+{
+    "admin": {
+        "routes": {
+            "actions": {
+                "translatable-strings/load": {
+                    "methods": [ "GET" ],
+                    "ident": "charcoal/admin/action/translatable-strings/load"
+                },
+                "translatable-strings/update": {
+                    "methods": [ "POST" ],
+                    "ident": "charcoal/admin/action/translatable-strings/update"
+                }
+            }
+        }
+    }
+}

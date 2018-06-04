@@ -1,0 +1,354 @@
+{{!--
+
+    Translatable Strings Widget
+    ===========================
+
+    `charcoal/admin/widget/translatable-strings-widget`
+
+    Display translations (as an interactive spreadsheet-like table),
+    filter them by context if need be and render the necessary input type.
+
+    - Use "[scope]" within translation tags to bind the translation to a filterable scope.
+    - Use ":type" at the key tail to specify a predefined input type for the translation string.
+
+    Examples:
+
+    ```
+    [[# _t ]][home]title[[/ _t ]]
+    [[# _t ]][home]summary:html[[/ _t ]]
+    [[# _t ]][home]header-image:img[[/ _t ]]
+    ```
+--}}
+<fieldset>
+    {{# showHeader }}
+        <header class="o-header -border">
+            {{# showTitle }}
+                <h2>{{ title }}</h2>
+            {{/ showTitle }}
+
+            {{> charcoal/admin/template/inc.description }}
+        </header>
+    {{/ showHeader }}
+
+    {{# widget }}
+        <div id="js-grid-{{ widgetId }}"></div>
+    {{/ widget }}
+
+    {{# addCssRequirement }}
+        <link type="text/css" rel="stylesheet"
+              href="https://cdnjs.cloudflare.com/ajax/libs/jsgrid/1.5.3/jsgrid.min.css"/>
+        <link type="text/css" rel="stylesheet"
+              href="https://cdnjs.cloudflare.com/ajax/libs/jsgrid/1.5.3/jsgrid-theme.min.css"/>
+    {{/ addCssRequirement }}
+
+    {{# addJsRequirement }}
+        <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/tinymce/4.7.11/tinymce.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jsgrid/1.5.3/jsgrid.min.js"></script>
+    {{/ addJsRequirement }}
+
+    {{# addJs }}
+        <script about="contextual-translatable">
+            var $table = $('#js-grid-{{ widgetId }}');
+            var $container = $table.parents('.js-group-tab');
+            var $tab = $('.js-group-tabs[data-toggle="tab"][href="#'+$container.prop('id')+'"]');
+            var init = false;
+
+            var lang = Charcoal.Admin.lang();
+            var widgetData = {{& widgetDataForJsAsJson }};
+            var translatableContext = widgetData.translation_context;
+
+            registerCustomFields();
+            initJsGrid();
+
+            $table.jsGrid('loadData', ({
+                translation_lang:    lang,
+                translation_context: translatableContext
+            })).done(function () {});
+
+            // Load localised translatable data on charcoal lang switcher input.
+            $(document).on('switch_language.charcoal', function () {
+                lang = Charcoal.Admin.lang();
+                $table.jsGrid('loadData', ({
+                    translation_lang:    lang,
+                    translation_context: translatableContext
+                })).done(function () {});
+            });
+
+            function initJsGrid() {
+                $table.jsGrid({
+                    width:     '100%',
+                    inserting: false,
+                    editing:   true,
+                    sorting:   true,
+                    paging:    true,
+                    autoload:  true,
+                    pageSize:  50,
+                    filtering: widgetData.has_filtering,
+                    controller: {
+                        loadData: function (filter) {
+                            filter.translation_context = filter.translation_context || widgetData.translatable_context;
+                            filter.translation_lang = filter.translation_lang || lang;
+
+                            return $.ajax({
+                                type: 'GET',
+                                url : '/admin/translatable-strings/load',
+                                data: filter
+                            });
+                        },
+                        updateItem: function (item) {
+                            return $.ajax({
+                                type: 'POST',
+                                url:  '/admin/translatable-strings/update',
+                                data: item
+                            });
+                        }
+                    },
+                    fields: [
+                        {
+                            name:    'translation_clean_key',
+                            title:   '{{# _t }}Ident{{/ _t }}',
+                            type:    'text',
+                            width:   100,
+                            editing: false
+                        },
+                        {
+                            name:    'translation_input_type',
+                            visible: false
+                        },
+                        {
+                            name:       'translation_context',
+                            visible:    widgetData.show_context,
+                            type:       'text',
+                            editing:    false,
+                            autosearch: true
+                        },
+                        {
+                            name:    'translation_value',
+                            type:    'flexibleField',
+                            title:   'Translation',
+                            sorting: false
+                        },
+                        {
+                            name:       'translation_lang',
+                            visible:    false,
+                            type:       'text',
+                            editing:    false,
+                            autosearch: true
+                        },
+                        {
+                            name:    'translation_key',
+                            visible: false
+                        },
+                        {
+                            type:         'control',
+                            deleteButton: false
+                        }
+                    ]
+                });
+
+                init = true;
+            }
+
+            function registerCustomFields() {
+                // elFinder field
+                var FlexibleField = function (config) {
+                    jsGrid.Field.call(this, config);
+                };
+
+                // TinyMCE field
+                var TinymceField = function (config) {
+                    jsGrid.Field.call(this, config);
+                };
+
+                FlexibleField.prototype = new jsGrid.Field({
+                    flexSubType: null,
+                    insertValue: function(value) {
+                        switch (this.flexSubType) {
+                            case 'html':
+                            case 'wysiwyg':
+                                return this.tinymceField.insertValue(value);
+                        }
+                        return this._editor.val();
+                    },
+                    editValue: function(value) {
+                        switch (this.flexSubType) {
+                            case 'html':
+                            case 'wysiwyg':
+                                return this.tinymceField.editValue(value);
+                            case 'img':
+                            case 'image':
+                                return this.elfinderField.editValue(value);
+                        }
+
+                        return this._editor.val();
+                    },
+                    cancelEdit: function() {
+                        switch (this.flexSubType) {
+                            case 'html':
+                            case 'wysiwyg':
+                                return this.tinymceField.cancelEdit();
+                        }
+
+                        jsGrid.Grid.prototype.cancelEdit.call(this);
+                    },
+                    itemTemplate: function (value, item) {
+                        this.flexSubType = item.translation_input_type;
+                        switch (this.flexSubType) {
+                            case 'img':
+                            case 'image':
+                                return this.elfinderField.itemTemplate(value);
+                            case 'html':
+                            case 'wysiwyg':
+                                return this.tinymceField.itemTemplate(value);
+                            default:
+                                return value;
+                        }
+                    },
+
+                    insertTemplate: function (value) {
+                        // switch (item.translation_input_type) {
+                        //     case 'img':
+                        //     case 'image':
+                        //         return this.elfinderField.itemTemplate(value);
+                        //     case 'html':
+                        //     case 'wysiwyg':
+                        //         return this.elfinderField.itemTemplate(value);
+                        //     default:
+                        //         return value;
+                        // }
+
+                        return value;
+                    },
+
+                    editTemplate: function (value, item) {
+                        this.flexSubType = item.translation_input_type;
+                        switch (this.flexSubType) {
+                            case 'img':
+                            case 'image':
+                                return this.elfinderField.editTemplate(value);
+                            case 'html':
+                            case 'wysiwyg':
+                                return this.tinymceField.editTemplate(value);
+                            default:
+                                return this._editor = $('<input type="text">').val(value);
+                        }
+                    },
+
+                    tinymceField: {
+                        insertValue: function() {
+                            return this.tinymce.getContent();
+                        },
+                        editValue: function() {
+                            return this.tinymce.getContent();
+                        },
+                        itemTemplate: function (value, item) {
+                            return this._editor = $('<div>').html(value);
+                        },
+                        editTemplate: function (value) {
+                            this._editor = jsGrid.fields.textarea.prototype.editTemplate.apply(this, arguments);
+
+                            // this._editor.css({
+                            //     "padding"   : "3px",
+                            //     "width"     : "100%",
+                            //     "box-sizing": "border-box",
+                            // });
+
+                            setTimeout(() => {
+                                this.tinymce = tinymce.init({
+                                    target: this._editor.get(0),
+                                    forced_root_block: false,
+                                    entity_encoding: 'raw',
+                                    element_format : 'html',
+                                    init_instance_callback : (editor) => {
+                                        this.tinymce = editor;
+                                    }
+                                });
+                            });
+                            return this._editor;
+                        },
+                        cancelEdit: function() {
+                            if (!this._editingRow) {
+                                return;
+                            }
+
+                            this.tinymce.remove();
+
+                            jsGrid.Grid.prototype.cancelEdit.call(this);
+                        }
+                    },
+
+                    elfinderField: {
+                        itemTemplate: function (value) {
+                            return '<img src="' + Charcoal.Admin.base_url() + value + '" style="max-width:100%;">';
+                        },
+                        editValue: function() {
+                            return this._editor.val();
+                        },
+                        editTemplate: function (value) {
+                            this._editor = $('<input>').val(value);
+
+                            if (!window.elFinderCallback) {
+                                window.elFinderCallback = {};
+                            }
+
+                            var that = this;
+
+                            window.elFinderCallback['{{ widget_id }}'] = (file) => {
+                                if (this.dialog) {
+                                    this.dialog.close();
+                                }
+
+                                if (file && file.path) {
+                                    this._editor.val(decodeURI(file.url).replace(Charcoal.Admin.base_url(), ''));
+                                    return true;
+                                }
+
+                                return false;
+                            };
+
+                            this._editor.on('focusin', () => {
+                                this.data = {
+                                    dialog_title: 'Test',
+                                    elfinder_url: '{{ admin_url }}elfinder?&callback={{widget_id}}'
+                                };
+
+                                this.dialog = BootstrapDialog.show({
+                                    title:    this.data.dialog_title || '',
+                                    size:     BootstrapDialog.SIZE_WIDE,
+                                    cssClass: '-elfinder {{widget_id}}',
+                                    message:  $(
+                                            '<iframe name="' + this.widget_id + '-elfinder" width="100%" height="400px" frameborder="0" ' +
+                                            'src="' + this.data.elfinder_url + '"></iframe>'
+                                    )
+                                });
+                            });
+
+                            return this._editor;
+                        }
+                    }
+                });
+
+                TinymceField.prototype = new jsGrid.Field({
+                    editTemplate: function (value) {
+                        this._tinymce = $('<textarea></textarea>').uniqueId();
+                        this._editor.css({
+                            'padding'   : '3px',
+                            'width'     : '100%',
+                            'box-sizing': 'border-box',
+                        });
+
+                        tinymce.init({
+                            selector: '#' + this._tinymce.attr('id')
+                        });
+
+                        return this._tinymce;
+                    }
+                });
+
+                jsGrid.fields.flexibleField = FlexibleField;
+                jsGrid.fields.tinymceField = TinymceField;
+            }
+        </script>
+    {{/ addJs }}
+</fieldset>
