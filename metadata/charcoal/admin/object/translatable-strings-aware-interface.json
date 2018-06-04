@@ -5,7 +5,7 @@
                 "permissions": [ "translatable/edit" ],
                 "title": {
                     "en": "Translations",
-                    "fr": "Traductions",
+                    "fr": "Traductions"
                 },
                 "show_title": false,
                 "show_header": false,
