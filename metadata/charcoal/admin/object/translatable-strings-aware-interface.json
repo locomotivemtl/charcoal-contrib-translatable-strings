@@ -19,7 +19,7 @@
                 },
                 "renderable_data": {
                     "show_context": true,
-                    "filtering": false
+                    "has_filtering": false
                 }
             }
         }
